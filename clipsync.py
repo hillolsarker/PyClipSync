@@ -3,6 +3,7 @@ import threading
 import pyperclip
 import netifaces as ni
 import time
+import struct
 import logging
 
 logging.basicConfig(
@@ -64,7 +65,6 @@ def broadcast_presence():
     while True:
         message = f"CLIPBOARD_PEER {LOCAL_IP}"
         sock.sendto(message.encode(), ('<broadcast>', BROADCAST_PORT))
-        # sock.sendto(message.encode(), ('192.168.86.255', BROADCAST_PORT))  # Replace with your subnet's broadcast address
         logging.debug(f"Broadcasting presence: {message}")
         time.sleep(DISCOVERY_INTERVAL)
 
@@ -102,7 +102,6 @@ def listen_for_peers():
                     logging.info(f"Discovered new peer: {peer_ip}")
                 peers.add(peer_ip)
 
-### Step 2: Share clipboard contents ###
 def send_clipboard():
     """
     Monitors the system clipboard for changes and sends the updated clipboard content to connected peers.
@@ -133,49 +132,57 @@ def send_clipboard():
         time.sleep(1)
 
 
-def send_to_peer(peer_ip, clipboard_text, retries=3, delay=2):
+def send_to_peer(peer_ip, clipboard_text):
     """
-    Sends clipboard text to a specific peer with retry logic.
+    Sends the clipboard text to a peer over a TCP connection.
 
     Args:
-        peer_ip (str): The IP address of the peer.
-        clipboard_text (str): The clipboard text to send.
-        retries (int): Number of times to retry on failure.
-        delay (int): Delay (seconds) between retries.
+        peer_ip (str): The IP address of the peer to send the clipboard text to.
+        clipboard_text (str): The text from the clipboard to send.
 
-    Logs:
-        - Success: Logs when the clipboard is successfully sent.
-        - Failure: Retries before removing the peer.
+    Raises:
+        Exception: If there is an error in creating the socket, connecting to the peer, 
+                   or sending the data, an exception is caught and logged.
+
+    Notes:
+        The function first creates a socket and connects to the peer using the specified IP address 
+        and a predefined port (CLIPBOARD_PORT). It then encodes the clipboard text and sends it 
+        with a 4-byte length prefix. If an error occurs, it logs a warning and removes the peer 
+        from the list of reachable peers.
     """
-    for attempt in range(retries):
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(3)  # Timeout for faster failure detection
-            sock.connect((peer_ip, CLIPBOARD_PORT))
-            sock.sendall(clipboard_text.encode())
-            logging.info(f"Sent clipboard to {peer_ip}: {clipboard_text[:50]}...")
-            sock.close()
-            return  # Success, exit function
-        except Exception as e:
-            logging.warning(f"Attempt {attempt+1}/{retries} - Failed to send to {peer_ip}: {e}")
-            time.sleep(delay)  # Wait before retrying
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((peer_ip, CLIPBOARD_PORT))
 
-    logging.warning(f"Peer {peer_ip} is unreachable. Removing from list.")
-    peers.discard(peer_ip)  # Remove after multiple failures
+        # Encode clipboard text and get its length
+        data = clipboard_text.encode()
+        length_prefix = struct.pack("!I", len(data))  # 4-byte length header
+
+        # Send length header first, then actual clipboard data
+        sock.sendall(length_prefix + data)
+        logging.info(f"Sent clipboard to {peer_ip}: {clipboard_text[:50]}...")
+        sock.close()
+    except Exception as e:
+        logging.warning(f"Failed to send clipboard to {peer_ip}: {e}")
+        peers.discard(peer_ip)  # Remove unreachable peers
 
 def receive_clipboard():
     """
-    Listens for clipboard data from peers and updates local clipboard.
-
-    This function creates a socket to listen for incoming clipboard data on a specified port.
-    When data is received, it logs the source address and the first 50 characters of the data,
-    then updates the local clipboard with the received data.
-
+    Listens for incoming clipboard data on a specified port, receives the data,
+    and sets the local clipboard with the received content.
+    The function creates a socket to listen for incoming connections. When a 
+    connection is accepted, it reads the first 4 bytes to determine the length 
+    of the incoming message. It then reads the full message based on the length 
+    and decodes it to a string. The received clipboard text is then copied to 
+    the local clipboard using the pyperclip library.
+    The function runs indefinitely, accepting and processing incoming clipboard 
+    data.
+    Logging:
+        Logs the IP address of the sender and the first 50 characters of the 
+        received clipboard text.
     Raises:
-        OSError: If there is an issue with the socket connection.
-
-    Note:
-        Ensure that the `CLIPBOARD_PORT` is defined and `pyperclip` and `logging` modules are properly configured.
+        Any exceptions raised by socket operations or pyperclip are not handled 
+        within this function and will propagate to the caller.
     """
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(("", CLIPBOARD_PORT))
@@ -183,11 +190,28 @@ def receive_clipboard():
 
     while True:
         conn, addr = sock.accept()
-        data = conn.recv(4096).decode()
-        if data:
-            logging.info(f"Received clipboard from {addr[0]}: {data[:50]}...")
-            pyperclip.copy(data)  # Set clipboard
+
+        # Read the first 4 bytes (message length)
+        length_data = conn.recv(4)
+        if not length_data:
+            conn.close()
+            continue
+
+        # Unpack length and read full message
+        message_length = struct.unpack("!I", length_data)[0]
+        data = b""
+        while len(data) < message_length:
+            chunk = conn.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+        
         conn.close()
+        clipboard_text = data.decode()
+        
+        if clipboard_text:
+            logging.info(f"Received clipboard from {addr[0]}: {clipboard_text[:50]}...")
+            pyperclip.copy(clipboard_text)  # Set clipboard
 
 
 if __name__ == "__main__":
