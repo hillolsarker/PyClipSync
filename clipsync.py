@@ -30,13 +30,13 @@ def get_local_ip():
     try:
         interfaces = ni.interfaces()
         for iface in interfaces:
-            if iface == 'en0':
-                iface_details = ni.ifaddresses(iface)
-                if ni.AF_INET in iface_details:
-                    ip = iface_details[ni.AF_INET][0]['addr']
+            iface_details = ni.ifaddresses(iface)
+            if ni.AF_INET in iface_details:
+                ip = iface_details[ni.AF_INET][0]['addr']
+                if not ip.startswith("127."):  # Ignore loopback
                     return ip
         return "127.0.0.1"
-    except Exception as e:
+    except Exception:
         return "127.0.0.1"
 
 
@@ -64,6 +64,7 @@ def broadcast_presence():
     while True:
         message = f"CLIPBOARD_PEER {LOCAL_IP}"
         sock.sendto(message.encode(), ('<broadcast>', BROADCAST_PORT))
+        # sock.sendto(message.encode(), ('192.168.86.255', BROADCAST_PORT))  # Replace with your subnet's broadcast address
         logging.debug(f"Broadcasting presence: {message}")
         time.sleep(DISCOVERY_INTERVAL)
 
@@ -127,34 +128,40 @@ def send_clipboard():
         if current_clipboard and current_clipboard != last_clipboard:
             last_clipboard = current_clipboard
             logging.info(f"Clipboard changed. Sending to {len(peers)} peer(s).")
-            for peer in peers:
+            for peer in list(peers):
                 send_to_peer(peer, current_clipboard)
         time.sleep(1)
 
-def send_to_peer(peer_ip, clipboard_text):
+
+def send_to_peer(peer_ip, clipboard_text, retries=3, delay=2):
     """
-    Sends clipboard text to a specific peer.
+    Sends clipboard text to a specific peer with retry logic.
 
     Args:
-        peer_ip (str): The IP address of the peer to send the clipboard text to.
-        clipboard_text (str): The text from the clipboard to send.
-
-    Raises:
-        Exception: If there is an error in creating the socket, connecting to the peer, or sending the data.
+        peer_ip (str): The IP address of the peer.
+        clipboard_text (str): The clipboard text to send.
+        retries (int): Number of times to retry on failure.
+        delay (int): Delay (seconds) between retries.
 
     Logs:
-        Info: Logs the first 50 characters of the clipboard text sent to the peer.
-        Warning: Logs a warning if sending the clipboard text fails and removes the peer from the list of reachable peers.
+        - Success: Logs when the clipboard is successfully sent.
+        - Failure: Retries before removing the peer.
     """
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((peer_ip, CLIPBOARD_PORT))
-        sock.sendall(clipboard_text.encode())
-        logging.info(f"Sent clipboard to {peer_ip}: {clipboard_text[:50]}...")  # Log first 50 chars
-        sock.close()
-    except Exception as e:
-        logging.warning(f"Failed to send clipboard to {peer_ip}: {e}")
-        peers.discard(peer_ip)  # Remove unreachable peers
+    for attempt in range(retries):
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(3)  # Timeout for faster failure detection
+            sock.connect((peer_ip, CLIPBOARD_PORT))
+            sock.sendall(clipboard_text.encode())
+            logging.info(f"Sent clipboard to {peer_ip}: {clipboard_text[:50]}...")
+            sock.close()
+            return  # Success, exit function
+        except Exception as e:
+            logging.warning(f"Attempt {attempt+1}/{retries} - Failed to send to {peer_ip}: {e}")
+            time.sleep(delay)  # Wait before retrying
+
+    logging.warning(f"Peer {peer_ip} is unreachable. Removing from list.")
+    peers.discard(peer_ip)  # Remove after multiple failures
 
 def receive_clipboard():
     """
