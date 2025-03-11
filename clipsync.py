@@ -1,6 +1,7 @@
 import socket
 import threading
 import pyperclip
+import netifaces as ni
 import time
 import logging
 
@@ -16,16 +17,28 @@ DISCOVERY_INTERVAL = 5  # Seconds
 PEER_TIMEOUT = 10  # Seconds before removing a peer
 peers = set()  # Stores discovered peers
 
-# Get local machine's IP
 def get_local_ip():
+    """
+    Retrieves the local IP address of the machine.
+
+    This function attempts to get the IP address of the 'en0' network interface.
+    If the 'en0' interface is not found or an error occurs, it defaults to returning '127.0.0.1'.
+
+    Returns:
+        str: The local IP address or '127.0.0.1' if the IP address cannot be determined.
+    """
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))  # External dummy connection
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except:
+        interfaces = ni.interfaces()
+        for iface in interfaces:
+            if iface == 'en0':
+                iface_details = ni.ifaddresses(iface)
+                if ni.AF_INET in iface_details:
+                    ip = iface_details[ni.AF_INET][0]['addr']
+                    return ip
         return "127.0.0.1"
+    except Exception as e:
+        return "127.0.0.1"
+
 
 LOCAL_IP = get_local_ip()
 logging.info(f"Local machine IP: {LOCAL_IP}")
