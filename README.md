@@ -18,7 +18,7 @@ python --version
 ### Install Dependencies
 Clone the repository and install the required dependencies using:
 ```sh
-git clone https://github.com/yourusername/PyClipSync.git
+git clone https://github.com/hillolsarker/PyClipSync.git
 cd PyClipSync
 pip install -r requirements.txt
 ```
