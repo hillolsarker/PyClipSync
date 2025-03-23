@@ -5,13 +5,15 @@ import time
 import logging
 
 from core.config import AppConfig
+from core.clipboard_manager import ClipboardManager
+from core.crypto import CryptoManager
+from core.peer_discovery import PeerDiscovery
 
 class ClipboardSync:
-    def __init__(self, config: AppConfig, crypto_manager, clipboard_manager, peer_discovery):
+    def __init__(self, config: AppConfig, crypto_manager: CryptoManager, clipboard_manager: ClipboardManager, peer_discovery: PeerDiscovery):
         self.config = config
         self.crypto = crypto_manager
         self.clipboard = clipboard_manager
-        self.peers = peer_discovery.peers
         self.peer_discovery = peer_discovery
 
     def start(self):
@@ -22,8 +24,9 @@ class ClipboardSync:
         while True:
             if self.clipboard.has_changed():
                 content = self.clipboard.get_clipboard()
-                logging.info(f"Clipboard changed. Sending to {len(self.peers)} peer(s).")
-                for peer_ip, peer_pubkey in list(self.peers.items()):
+                peers = self.peer_discovery.get_peers_snapshot()
+                logging.info(f"Clipboard changed. Sending to {len(peers)} peer(s).")
+                for peer_ip, peer_pubkey in list(peers.items()):
                     self.send_to_peer(peer_ip, content, peer_pubkey)
             time.sleep(1)
 
