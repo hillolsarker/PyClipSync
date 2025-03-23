@@ -58,9 +58,10 @@ class ClipboardSync:
             encrypted_data = conn.recv(msg_len)
             conn.close()
 
-            if peer_ip in self.peer_discovery.get_peers_snapshot():
+            peers = self.peer_discovery.get_peers_snapshot()
+            if peer_ip in peers:
                 try:
-                    text = self.crypto.decrypt(encrypted_data, self.peers[peer_ip])
+                    text = self.crypto.decrypt(encrypted_data, peers[peer_ip])
                     logging.info(f"Received clipboard from {peer_ip}")
                     self.clipboard.copy_to_clipboard(text)
                 except Exception as e:
