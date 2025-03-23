@@ -23,7 +23,7 @@ class ClipboardSync:
             if self.clipboard.has_changed():
                 content = self.clipboard.get_clipboard()
                 logging.info(f"Clipboard changed. Sending to {len(self.peers)} peer(s).")
-                for peer_ip, peer_pubkey in self.peers.items():
+                for peer_ip, peer_pubkey in list(self.peers.items()):
                     self.send_to_peer(peer_ip, content, peer_pubkey)
             time.sleep(1)
 
