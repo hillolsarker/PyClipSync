@@ -40,7 +40,7 @@ class ClipboardSync:
             logging.info(f"Sent to {peer_ip}")
         except Exception as e:
             logging.warning(f"Send failed to {peer_ip}: {e}")
-            self.peers.pop(peer_ip, None)
+            self.peer_discovery.peers.pop(peer_ip, None)
 
     def receive_clipboard_loop(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -58,7 +58,7 @@ class ClipboardSync:
             encrypted_data = conn.recv(msg_len)
             conn.close()
 
-            if peer_ip in self.peers:
+            if peer_ip in self.peer_discovery.get_peers_snapshot():
                 try:
                     text = self.crypto.decrypt(encrypted_data, self.peers[peer_ip])
                     logging.info(f"Received clipboard from {peer_ip}")
