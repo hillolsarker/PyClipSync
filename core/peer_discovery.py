@@ -44,7 +44,7 @@ class PeerDiscovery:
                 peer_pubkey = bytes.fromhex(parts[2])
                 self.peers[peer_ip] = peer_pubkey
                 self.callback(peer_ip, peer_pubkey)
-                logging.info(f"Discovered peer {peer_ip} with key {peer_pubkey.hex()}")
+                logging.debug(f"Discovered peer {peer_ip} with key {peer_pubkey.hex()}")
 
     def start(self):
         threading.Thread(target=self.broadcast_presence, daemon=True).start()
