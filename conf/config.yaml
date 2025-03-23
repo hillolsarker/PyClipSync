@@ -1,0 +1,13 @@
+clipboard:
+  port: 50001
+  poll_interval: 1
+
+discovery:
+  broadcast_port: 50000
+  interval: 5
+
+crypto:
+  encryption: true
+
+logging:
+  level: INFO
