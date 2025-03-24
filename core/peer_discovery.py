@@ -3,7 +3,8 @@ import threading
 import time
 import logging
 import netifaces as ni
-from typing import Callable, Dict
+from typing import Callable, Dict, Tuple
+from screeninfo import get_monitors
 
 from core.config import AppConfig
 
@@ -11,6 +12,7 @@ class PeerDiscovery:
     def __init__(
             self, 
             config: AppConfig, 
+            name: str,
             local_public_key: bytes, 
             callback: Callable[[str, bytes], None]
         ):
@@ -26,6 +28,7 @@ class PeerDiscovery:
 
         Attributes:
             config (AppConfig): Stores the application configuration.
+            name (str): The name of the local peer.
             local_ip (str): The local IP address of the peer.
             public_key (bytes): The local public key of the peer.
             callback (Callable[[str, bytes], None]): The callback function for 
@@ -36,10 +39,13 @@ class PeerDiscovery:
                 to shared resources.
         """
         self.config: AppConfig = config
+        self.name: str = name
         self.local_ip: str = self.get_local_ip()
         self.public_key: bytes = local_public_key
         self.callback: Callable[[str, bytes], None] = callback
         self.peers: Dict[str, bytes] = {}
+        self.peer_names: Dict[str, str] = {}
+        self.peer_resolutions: Dict[str, Tuple[int, int]] = {}
         self.lock: threading.Lock = threading.Lock()
 
     def get_local_ip(self) -> str:
@@ -61,6 +67,12 @@ class PeerDiscovery:
                 if not ip.startswith("127."):
                     return ip
         return "127.0.0.1"
+
+    def get_screen_resolution(self) -> Tuple[int, int]:
+        monitors = get_monitors()
+        if monitors:
+            return monitors[0].width, monitors[0].height
+        return (1920, 1080)
 
     def broadcast_presence(self) -> None:
         """
@@ -87,8 +99,9 @@ class PeerDiscovery:
         logging.info("Broadcast thread started.")
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        width, height = self.get_screen_resolution()
         while True:
-            message = f"CLIPBOARD_PEER {self.local_ip} {self.public_key.hex()}"
+            message = f"CLIPBOARD_PEER {self.name} {self.local_ip} {self.public_key.hex()} {width}x{height}"
             try:
                 sock.sendto(message.encode(), ('<broadcast>', self.config.broadcast_port))
             except Exception as e:
@@ -136,17 +149,16 @@ class PeerDiscovery:
         while True:
             try:
                 data, addr = sock.recvfrom(1024)
-                peer_ip = addr[0]
                 parts = data.decode().split()
-                if parts[0] == "CLIPBOARD_PEER" and peer_ip != self.local_ip:
-                    peer_pubkey = bytes.fromhex(parts[2])
-                    with self.lock:
-                        if peer_ip not in self.peers:
-                            self.peers[peer_ip] = peer_pubkey
-                            self.callback(peer_ip, peer_pubkey)
-                            logging.info(f"Discovered new peer: {peer_ip}")
-                        else:
-                            self.peers[peer_ip] = peer_pubkey
+                if parts[0] == "CLIPBOARD_PEER":
+                    peer_name, peer_ip, pubkey_hex, resolution = parts[1], parts[2], parts[3], parts[4]
+                    if peer_ip != self.local_ip:
+                        with self.lock:
+                            self.peers[peer_ip] = bytes.fromhex(pubkey_hex)
+                            self.peer_names[peer_ip] = peer_name
+                            self.peer_resolutions[peer_ip] = tuple(map(int, resolution.split("x")))
+                            self.callback(peer_ip, self.peers[peer_ip])
+                            logging.info(f"Discovered new peer: {peer_name} ({peer_ip})")
             except Exception as e:
                 logging.warning(f"Error receiving peer info: {e}")
 
@@ -177,3 +189,11 @@ class PeerDiscovery:
         """
         with self.lock:
             return dict(self.peers)
+
+    def get_name_by_ip(self, ip: str) -> str:
+        with self.lock:
+            return self.peer_names.get(ip)
+
+    def get_peer_resolution(self, ip: str) -> Tuple[int, int]:
+        with self.lock:
+            return self.peer_resolutions.get(ip, (1920, 1080))

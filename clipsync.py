@@ -1,11 +1,14 @@
 import time
 import logging
 import hydra
+import argparse
 from omegaconf import DictConfig
 from core.crypto import CryptoManager
 from core.clipboard_manager import ClipboardManager
 from core.peer_discovery import PeerDiscovery
 from core.clipboard_sync import ClipboardSync
+from core.input_manager import InputManager
+from core.input_receiver import InputReceiver
 from core.config import AppConfig
 
 @hydra.main(config_path="conf", config_name="config", version_base=None)
@@ -42,12 +45,25 @@ def main(config: DictConfig):
         This function runs an infinite loop to keep the service active. 
         Ensure proper termination handling when integrating into larger systems.
     """
+
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(message)s",
         level=config.logging.level
     )
 
     app_config = AppConfig(config)
+
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--name", required=True)
+    parser.add_argument("--layout", required=True)
+    args = parser.parse_args()
+
+    layout = args.layout.split(",")
+    input_mgr = InputManager(app_config, discovery, layout, args.name)
+    input_recv = InputReceiver(app_config)
+    input_mgr.start()
+    input_recv.start()
 
     crypto = CryptoManager()
     clipboard = ClipboardManager()

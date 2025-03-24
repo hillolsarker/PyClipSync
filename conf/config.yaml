@@ -2,6 +2,9 @@ clipboard:
   port: 50001
   poll_interval: 1
 
+input:
+  port: 50002
+
 discovery:
   broadcast_port: 50000
   interval: 5

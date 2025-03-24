@@ -2,3 +2,5 @@ pyperclip
 netifaces
 cryptography
 hydra-core
+screeninfo
+pynput
