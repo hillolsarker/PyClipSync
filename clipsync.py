@@ -10,6 +10,38 @@ from core.config import AppConfig
 
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(config: DictConfig):
+    """
+    Entry point for the clipboard sharing service.
+
+    This function initializes and starts the necessary components for the 
+    clipboard sharing service, including logging, configuration, cryptography, 
+    clipboard management, peer discovery, and clipboard synchronization.
+
+    Args:
+        config (DictConfig): The configuration object containing settings 
+                             for logging, application behavior, and other 
+                             parameters.
+
+    Components:
+        - Logging: Configures the logging system based on the provided 
+          configuration.
+        - AppConfig: Wraps the configuration for easier access and management.
+        - CryptoManager: Handles cryptographic operations, such as generating 
+          public/private keys.
+        - ClipboardManager: Manages clipboard operations.
+        - PeerDiscovery: Discovers peers on the network and handles peer 
+          communication.
+        - ClipboardSync: Synchronizes clipboard content across discovered peers.
+
+    Behavior:
+        - Starts the peer discovery and clipboard synchronization services.
+        - Logs the service startup message.
+        - Keeps the service running indefinitely with periodic sleep intervals.
+
+    Note:
+        This function runs an infinite loop to keep the service active. 
+        Ensure proper termination handling when integrating into larger systems.
+    """
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(message)s",
         level=config.logging.level
