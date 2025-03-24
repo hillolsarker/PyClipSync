@@ -35,6 +35,7 @@ class ClipboardSync:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect((peer_ip, self.config.clipboard_port))
             encrypted = self.crypto.encrypt(content, pubkey)
+            logging.debug(f"Encrypted clipboard size: {len(encrypted)} bytes")
             sock.sendall(struct.pack("!I", len(encrypted)) + encrypted)
             sock.close()
             logging.info(f"Sent to {peer_ip}")
@@ -55,7 +56,13 @@ class ClipboardSync:
                 conn.close()
                 continue
             msg_len = struct.unpack("!I", length_data)[0]
-            encrypted_data = conn.recv(msg_len)
+            # encrypted_data = conn.recv(msg_len)
+            encrypted_data = b''
+            while len(encrypted_data) < msg_len:
+                chunk = conn.recv(msg_len - len(encrypted_data))
+                if not chunk:
+                    break
+                encrypted_data += chunk
             conn.close()
 
             peers = self.peer_discovery.get_peers_snapshot()
