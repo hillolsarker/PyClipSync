@@ -33,7 +33,7 @@ class InputManager:
             if x <= 0 and self.current_index < len(self.layout) - 1:
                 self._switch_to(self.layout[self.current_index + 1])
             # RIGHT EDGE → switch to right neighbor (in layout)
-            elif x >= self.own_width and self.current_index > 0:
+            elif x >= self.own_width * 0.95 and self.current_index > 0:
                 self._switch_to(self.layout[self.current_index - 1])
             elif self.active_peer == self.name:
                 self._send_mouse_event(x, y)
