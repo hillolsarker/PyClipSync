@@ -56,7 +56,6 @@ class ClipboardSync:
                 conn.close()
                 continue
             msg_len = struct.unpack("!I", length_data)[0]
-            # encrypted_data = conn.recv(msg_len)
             encrypted_data = b''
             while len(encrypted_data) < msg_len:
                 chunk = conn.recv(msg_len - len(encrypted_data))
