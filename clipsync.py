@@ -1,15 +1,22 @@
+import sys
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--name", required=True)
+parser.add_argument("--layout", required=True)
+args, remaining_argv = parser.parse_known_args()
+
 import time
 import logging
 import hydra
-import argparse
 from omegaconf import DictConfig
 from core.crypto import CryptoManager
 from core.clipboard_manager import ClipboardManager
 from core.peer_discovery import PeerDiscovery
 from core.clipboard_sync import ClipboardSync
+from core.config import AppConfig
 from core.input_manager import InputManager
 from core.input_receiver import InputReceiver
-from core.config import AppConfig
 
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(config: DictConfig):
@@ -45,7 +52,6 @@ def main(config: DictConfig):
         This function runs an infinite loop to keep the service active. 
         Ensure proper termination handling when integrating into larger systems.
     """
-
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(message)s",
         level=config.logging.level
@@ -53,29 +59,24 @@ def main(config: DictConfig):
 
     app_config = AppConfig(config)
 
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--name", required=True)
-    parser.add_argument("--layout", required=True)
-    args = parser.parse_args()
+    crypto = CryptoManager()
+    clipboard = ClipboardManager()
+    discovery = PeerDiscovery(app_config, args.name, crypto.public_key, lambda ip, pk: None)
+    sync = ClipboardSync(app_config, crypto, clipboard, discovery)
 
     layout = args.layout.split(",")
     input_mgr = InputManager(app_config, discovery, layout, args.name)
     input_recv = InputReceiver(app_config)
-    input_mgr.start()
-    input_recv.start()
-
-    crypto = CryptoManager()
-    clipboard = ClipboardManager()
-    discovery = PeerDiscovery(app_config, crypto.public_key, lambda ip, pk: None)
-    sync = ClipboardSync(app_config, crypto, clipboard, discovery)
 
     discovery.start()
     sync.start()
+    input_mgr.start()
+    input_recv.start()
 
-    logging.info("Clipboard sharing service started.")
+    logging.info("Clipboard and input sharing service started.")
     while True:
         time.sleep(60)
 
 if __name__ == "__main__":
+    sys.argv = [sys.argv[0]] + remaining_argv  # filter args for Hydra
     main()
