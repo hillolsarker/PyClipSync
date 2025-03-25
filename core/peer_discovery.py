@@ -154,11 +154,12 @@ class PeerDiscovery:
                     peer_name, peer_ip, pubkey_hex, resolution = parts[1], parts[2], parts[3], parts[4]
                     if peer_ip != self.local_ip:
                         with self.lock:
+                            if peer_ip not in self.peers:
+                                logging.info(f"Discovered new peer: {peer_name} ({peer_ip})")
                             self.peers[peer_ip] = bytes.fromhex(pubkey_hex)
                             self.peer_names[peer_ip] = peer_name
                             self.peer_resolutions[peer_ip] = tuple(map(int, resolution.split("x")))
                             self.callback(peer_ip, self.peers[peer_ip])
-                            logging.info(f"Discovered new peer: {peer_name} ({peer_ip})")
             except Exception as e:
                 logging.warning(f"Error receiving peer info: {e}")
 
